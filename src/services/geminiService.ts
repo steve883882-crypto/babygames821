@@ -2,36 +2,37 @@
 
 import { Activity } from '../App';
 
+// 新增一个辅助函数，用于将 File 对象转换为 Base64 Data URL
+const fileToDataUrl = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
+
 export async function generatePlayActivities(imageFile: File, ageInMonths: number): Promise<Activity[]> {
-  
-  // =================================================================
-  // ▼▼▼ 请在这里添加前端日志 ▼▼▼
-  // =================================================================
-  console.log('--- 验证前端数据 ---');
-  console.log('接收到的 imageFile 对象:', imageFile);
-  console.log('是否是 File 类型:', imageFile instanceof File);
-  console.log('文件名:', imageFile.name);
-  console.log('文件大小:', imageFile.size);
-  console.log('文件类型:', imageFile.type);
-  console.log('接收到的 ageInMonths:', ageInMonths);
-  console.log('--------------------');
-
-  if (imageFile.size === 0) {
-    alert("错误：选择的图片文件为空，请重新选择！");
-    throw new Error("Selected file is empty.");
-  }
-  // =================================================================
-  // ▲▲▲ 日志代码结束 ▲▲▲
-  // =================================================================
-
   try {
-    const formData = new FormData();
-    formData.append('image', imageFile);
-    formData.append('age', ageInMonths.toString());
+    // 1. 将 File 对象转换为 Base64 字符串
+    const imageUrlBase64 = await fileToDataUrl(imageFile);
+
+    // 2. 构建纯 JSON 请求体
+    const payload = {
+      age: ageInMonths.toString(),
+      image: imageUrlBase64, // 发送 Base64 字符串
+      imageName: imageFile.name, // 附加文件名
+      imageType: imageFile.type,   // 附加文件类型
+    };
     
+    // 3. 发送 application/json 请求
     const response = await fetch('/api/generate-ideas', {
       method: 'POST',
-      body: formData
+      headers: {
+        'Content-Type': 'application/json', // 明确指定为 JSON
+      },
+      body: JSON.stringify(payload) // 序列化为 JSON 字符串
     });
 
     const data = await response.json();
