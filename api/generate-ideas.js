@@ -126,7 +126,7 @@ app.post('/api/generate-ideas', upload.single('image'), async (req, res) => {
     // Package inputs into "inputs" JSON string field, including the file_id
     const inputs = {
       age: age,
-      files: { 
+      toyimage: { 
         type: "image",
         transfer_method: "upload_file_id",
         upload_file_id: fileId
