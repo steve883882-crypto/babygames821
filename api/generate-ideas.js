@@ -1,8 +1,8 @@
-// api/generate-ideas.js - 终极修正版 (使用 JSON 传输)
+// api/generate-ideas.js - 终极修正版 (添加 express.json())
 
 import express from 'express';
 import cors from 'cors';
-// import multer from 'multer'; // 不再需要 multer
+// multer 不再需要
 import FormData from 'form-data';
 import axios from 'axios';
 import { config } from 'dotenv';
@@ -17,13 +17,16 @@ const app = express();
 let port = 3001;
 
 // --- 关键修改点 START ---
-// 使用 express.json() 中间件来解析 application/json 请求体
-// 增加 limit 以支持较大的 base64 图片字符串
-app.use(express.json({ limit: '10mb' })); 
+// 1. 启用 CORS
 app.use(cors({ origin: 'http://localhost:5174', credentials: true }));
+
+// 2. 添加 express.json() 中间件来解析 application/json 请求体
+//    这是后端无法获取 age 和 image 数据的根本原因
+//    增加 limit 以支持较大的 base64 图片字符串
+app.use(express.json({ limit: '10mb' }));
 // --- 关键修改点 END ---
 
-// 我们不再需要 multer，所以路由处理器变得更简单
+
 app.post('/api/generate-ideas', async (req, res) => {
   try {
     const difyApiBaseUrl = process.env.DIFY_API_BASE_URL;
@@ -33,10 +36,11 @@ app.post('/api/generate-ideas', async (req, res) => {
       return res.status(500).json({ error: 'Missing Dify API configuration' });
     }
 
-    // 从 req.body 中直接获取所有数据
+    // 现在 req.body 应该能被正确解析
     const { age, image: imageBase64, imageName, imageType } = req.body;
 
     if (!age || !imageBase64 || !imageName || !imageType) {
+      console.error('Backend validation failed. Received body:', req.body);
       return res.status(400).json({ error: 'Age and image data are required' });
     }
     
@@ -46,11 +50,11 @@ app.post('/api/generate-ideas', async (req, res) => {
     let apiUrl = difyApiBaseUrl.trim().replace(/\/$/, '');
     if (!apiUrl.startsWith('http')) apiUrl = 'https://' + apiUrl;
     
-    // 步骤 1: 上传文件到 Dify (现在使用解码后的 Buffer)
+    // 步骤 1: 上传文件到 Dify
     const uploadFileUrl = `${apiUrl}/v1/files/upload`;
     const uploadFormData = new FormData();
     uploadFormData.append('user', 'my-app-user-123');
-    uploadFormData.append('file', buffer, { // 直接使用 Buffer
+    uploadFormData.append('file', buffer, {
       filename: imageName,
       contentType: imageType,
     });
@@ -59,9 +63,9 @@ app.post('/api/generate-ideas', async (req, res) => {
       headers: { ...uploadFormData.getHeaders(), 'Authorization': `Bearer ${difyApiKey}` },
     });
     const fileId = uploadResponse.data.id;
-    console.log('File uploaded successfully, file_id:', fileId);
+    console.log('File uploaded to Dify successfully, file_id:', fileId);
 
-    // 步骤 2: 执行 Dify 工作流 (这部分逻辑不变)
+    // 步骤 2: 执行 Dify 工作流
     const workflowUrl = `${apiUrl}/v1/workflows/run`;
     const workflowPayload = {
       inputs: {
