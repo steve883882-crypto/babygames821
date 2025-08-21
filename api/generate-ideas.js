@@ -1,28 +1,35 @@
-// api/generate-ideas.js - 最终修正版 (手动发送 Buffer)
+// api/generate-ideas.js - 最终修正版
 
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
-import axios from 'axios'; // 确认已安装 axios
+import FormData from 'form-data';
+import axios from 'axios';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createServer } from 'http';
 
-// --- (环境变量和服务器基础配置) ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 config({ path: join(__dirname, '..', '.env.local') });
 const app = express();
 let port = 3001;
+
+// --- 关键修改点 START ---
+// 初始化 multer。.any() 允许我们接收所有字段，包括文件和文本
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
 });
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
-// --- (以上部分不变) ---
 
-app.post('/api/generate-ideas', upload.single('image'), async (req, res) => {
+// 使用 multer 中间件来解析 multipart/form-data
+app.use(upload.any());
+// --- 关键修改点 END ---
+
+app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+
+app.post('/api/generate-ideas', async (req, res) => { // 注意：移除了路由级别的 multer 中间件
   try {
     const difyApiBaseUrl = process.env.DIFY_API_BASE_URL;
     const difyApiKey = process.env.DIFY_API_KEY;
@@ -31,42 +38,34 @@ app.post('/api/generate-ideas', upload.single('image'), async (req, res) => {
       return res.status(500).json({ error: 'Missing Dify API configuration' });
     }
 
-    const imageFile = req.file;
+    // 从 req.files 和 req.body 中获取数据
+    const imageFile = req.files.find(f => f.fieldname === 'image');
     const age = req.body.age;
 
     if (!imageFile || !age) {
+      console.error('Validation failed:', { hasImage: !!imageFile, hasAge: !!age });
       return res.status(400).json({ error: 'Image file and age are required' });
     }
 
     let apiUrl = difyApiBaseUrl.trim().replace(/\/$/, '');
     if (!apiUrl.startsWith('http')) apiUrl = 'https://' + apiUrl;
     
-    // =================================================================
-    // 步骤 1: 上传文件 - **改用直接发送 Buffer 的方式**
-    // =================================================================
+    // 步骤 1: 上传文件到 Dify
     const uploadFileUrl = `${apiUrl}/v1/files/upload`;
-
-    // 创建一个新的 FormData 实例，仅用于构建请求体，但不直接传递给 axios
-    const formData = new FormData();
-    formData.append('file', imageFile.buffer, imageFile.originalname);
-    formData.append('user', 'my-app-user-123');
+    const uploadFormData = new FormData();
+    uploadFormData.append('file', imageFile.buffer, imageFile.originalname);
+    uploadFormData.append('user', 'my-app-user-123');
     
-    console.log('Uploading file to Dify by sending buffer directly...');
-    
-    // 使用 axios 直接发送 buffer
-    const uploadResponse = await axios.post(uploadFileUrl, formData.getBuffer(), {
+    const uploadResponse = await axios.post(uploadFileUrl, uploadFormData.getBuffer(), {
       headers: {
-        ...formData.getHeaders(),
+        ...uploadFormData.getHeaders(),
         'Authorization': `Bearer ${difyApiKey}`,
       },
     });
 
     const fileId = uploadResponse.data.id;
-    console.log('Uploaded file to Dify, file_id:', fileId);
 
-    // =================================================================
-    // 步骤 2: 执行工作流 (保持不变)
-    // =================================================================
+    // 步骤 2: 执行 Dify 工作流
     const workflowUrl = `${apiUrl}/v1/workflows/run`;
     const workflowPayload = {
       inputs: {
@@ -80,8 +79,6 @@ app.post('/api/generate-ideas', upload.single('image'), async (req, res) => {
       response_mode: "blocking",
       user: 'my-app-user-123'
     };
-
-    console.log('Sending JSON request to Dify Workflow API...');
     
     const difyResponse = await axios.post(workflowUrl, workflowPayload, {
       headers: {
@@ -89,8 +86,6 @@ app.post('/api/generate-ideas', upload.single('image'), async (req, res) => {
         'Content-Type': 'application/json',
       },
     });
-
-    console.log('Dify API response received.');
 
     const result = difyResponse.data.data?.outputs?.result;
     if (!result) throw new Error('Unexpected response format from Dify API');
@@ -112,7 +107,7 @@ app.post('/api/generate-ideas', upload.single('image'), async (req, res) => {
   }
 });
 
-// ... (服务器启动和错误处理代码保持不变) ...
+// ... (服务器启动代码保持不变) ...
 const server = createServer(app);
 server.listen(port, () => {
     console.log(`API server running at http://localhost:${port}`);
