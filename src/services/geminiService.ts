@@ -1,34 +1,60 @@
 import { Activity } from '../App';
+import axios from 'axios'; // 引入 axios 以便在前端使用
+import FormData from 'form-data'; // 引入 form-data
 
-// generatePlayActivities现在直接接收一个File对象
+// generatePlayActivities 现在直接与 Dify API 通信
 export async function generatePlayActivities(imageFile: File, ageInMonths: number): Promise<Activity[]> {
   try {
-    // 不再需要fileToDataUrl转换，imageFile本身就是正确的格式
-    const formData = new FormData();
-    formData.append('image', imageFile); // 直接使用传入的File对象
-    formData.append('age', ageInMonths.toString());
+    // =================================================================
+    // 步骤 1: (前端) 直接上传文件到 Dify
+    // =================================================================
+    const uploadFormData = new FormData();
+    uploadFormData.append('user', 'my-app-user-123');
+    uploadFormData.append('file', imageFile);
+
+    console.log('Attempting to upload file directly to Dify proxy...');
     
-    // 发送请求到我们的后端代理
-    const response = await fetch('/api/generate-ideas', {
-      method: 'POST',
-      body: formData
+    // 注意：我们请求的是 /dify-api，Vite 会自动代理并加上认证头
+    const uploadResponse = await axios.post('/dify-api/files/upload', uploadFormData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
     });
 
-    const data = await response.json();
+    const fileId = uploadResponse.data.id;
+    console.log('File uploaded via proxy, file_id:', fileId);
 
-    if (!response.ok) {
-      console.error('API error response:', data);
-      throw new Error(data.details?.message || data.details || `API request failed: ${response.status}`);
-    }
+    // =================================================================
+    // 步骤 2: (前端) 直接执行 Dify 工作流
+    // =================================================================
+    const workflowPayload = {
+      inputs: {
+        age: ageInMonths.toString(),
+        toyimage: [{
+          type: "image",
+          transfer_method: "local_file",
+          upload_file_id: fileId
+        }]
+      },
+      response_mode: "blocking",
+      user: 'my-app-user-123'
+    };
+    
+    // 再次请求 /dify-api，Vite 会自动代理并加上认证头
+    const difyResponse = await axios.post('/dify-api/workflows/run', workflowPayload);
 
-    if (!data.activities || !Array.isArray(data.activities)) {
-      throw new Error('Invalid response format: activities array not found');
-    }
+    const result = difyResponse.data.data?.outputs?.result;
+    if (!result) throw new Error('Unexpected response format from Dify API');
+    
+    const activities = typeof result === 'string' ? JSON.parse(result) : result;
+    if (!Array.isArray(activities)) throw new Error('Dify API did not return an array of activities');
 
-    return data.activities;
+    const processedActivities = activities.map(activity => ({ ...activity, isFavorited: false }));
+    return processedActivities;
 
-  } catch (error) {
-    console.error('Error in generatePlayActivities:', error);
-    throw new Error(`生成游戏失败: ${error instanceof Error ? error.message : '未知错误'}`);
+  } catch (error: any) {
+    const errorDetails = error.response ? error.response.data : error.message;
+    console.error('Error in direct Dify call:', errorDetails);
+    throw new Error(`直接调用Dify失败: ${JSON.stringify(errorDetails)}`);
   }
 }
