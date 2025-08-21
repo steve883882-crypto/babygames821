@@ -1,8 +1,8 @@
-// api/generate-ideas.js
+// api/generate-ideas.js - 终极修正版 (使用 JSON 传输)
 
 import express from 'express';
 import cors from 'cors';
-import multer from 'multer';
+// import multer from 'multer'; // 不再需要 multer
 import FormData from 'form-data';
 import axios from 'axios';
 import { config } from 'dotenv';
@@ -16,36 +16,15 @@ config({ path: join(__dirname, '..', '.env.local') });
 const app = express();
 let port = 3001;
 
-const upload = multer({ storage: multer.memoryStorage() });
-
+// --- 关键修改点 START ---
+// 使用 express.json() 中间件来解析 application/json 请求体
+// 增加 limit 以支持较大的 base64 图片字符串
+app.use(express.json({ limit: '10mb' })); 
 app.use(cors({ origin: 'http://localhost:5174', credentials: true }));
+// --- 关键修改点 END ---
 
-// =================================================================
-// ▼▼▼ 请在这里添加第一处后端日志 (请求头检查) ▼▼▼
-// =================================================================
-app.use('/api/generate-ideas', (req, res, next) => {
-    console.log('\n--- 收到请求 /api/generate-ideas ---');
-    console.log('请求时间:', new Date().toISOString());
-    console.log('请求头 (Content-Type):', req.headers['content-type']);
-    console.log('---------------------------------');
-    next();
-});
-// =================================================================
-// ▲▲▲ 日志代码结束 ▲▲▲
-// =================================================================
-
-app.post('/api/generate-ideas', upload.single('image'), async (req, res) => {
-  // =================================================================
-  // ▼▼▼ 请在这里添加第二处后端日志 (Multer解析后检查) ▼▼▼
-  // =================================================================
-  console.log('\n--- Multer 中间件已执行 ---');
-  console.log('req.file (图片文件):', req.file ? `存在, 文件名: ${req.file.originalname}` : '不存在');
-  console.log('req.body (文本字段):', req.body);
-  console.log('---------------------------');
-  // =================================================================
-  // ▲▲▲ 日志代码结束 ▲▲▲
-  // =================================================================
-
+// 我们不再需要 multer，所以路由处理器变得更简单
+app.post('/api/generate-ideas', async (req, res) => {
   try {
     const difyApiBaseUrl = process.env.DIFY_API_BASE_URL;
     const difyApiKey = process.env.DIFY_API_KEY;
@@ -54,30 +33,35 @@ app.post('/api/generate-ideas', upload.single('image'), async (req, res) => {
       return res.status(500).json({ error: 'Missing Dify API configuration' });
     }
 
-    const imageFile = req.file;
-    const age = req.body.age;
+    // 从 req.body 中直接获取所有数据
+    const { age, image: imageBase64, imageName, imageType } = req.body;
 
-    if (!imageFile || !age) {
-      console.error('Backend validation failed:', { hasImage: !!imageFile, hasAge: !!age });
-      return res.status(400).json({ error: 'Image file and age are required' });
+    if (!age || !imageBase64 || !imageName || !imageType) {
+      return res.status(400).json({ error: 'Age and image data are required' });
     }
+    
+    // 将 Base64 字符串解码为 Buffer
+    const buffer = Buffer.from(imageBase64.split(',')[1], 'base64');
 
     let apiUrl = difyApiBaseUrl.trim().replace(/\/$/, '');
     if (!apiUrl.startsWith('http')) apiUrl = 'https://' + apiUrl;
     
+    // 步骤 1: 上传文件到 Dify (现在使用解码后的 Buffer)
     const uploadFileUrl = `${apiUrl}/v1/files/upload`;
     const uploadFormData = new FormData();
     uploadFormData.append('user', 'my-app-user-123');
-    uploadFormData.append('file', imageFile.buffer, {
-      filename: imageFile.originalname,
-      contentType: imageFile.mimetype,
+    uploadFormData.append('file', buffer, { // 直接使用 Buffer
+      filename: imageName,
+      contentType: imageType,
     });
     
     const uploadResponse = await axios.post(uploadFileUrl, uploadFormData, {
       headers: { ...uploadFormData.getHeaders(), 'Authorization': `Bearer ${difyApiKey}` },
     });
     const fileId = uploadResponse.data.id;
+    console.log('File uploaded successfully, file_id:', fileId);
 
+    // 步骤 2: 执行 Dify 工作流 (这部分逻辑不变)
     const workflowUrl = `${apiUrl}/v1/workflows/run`;
     const workflowPayload = {
       inputs: {
@@ -114,7 +98,6 @@ const server = createServer(app);
 server.listen(port, () => console.log(`API server running at http://localhost:${port}`))
   .on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-      console.log(`Port ${port} is in use, trying another one...`);
       port++;
       setTimeout(() => server.listen(port), 100);
     } else {
