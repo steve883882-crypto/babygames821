@@ -96,8 +96,8 @@ app.post('/api/generate-ideas', upload.single('image'), async (req, res) => {
     const uploadResponse = await fetch(uploadFileUrl, {
       method: 'POST',
       headers: { 
-        'Authorization': `Bearer ${difyApiKey}`
-        // Note: Don't set Content-Type header, let fetch set it automatically for FormData
+        'Authorization': `Bearer ${difyApiKey}`,
+        ...uploadFormData.getHeaders()
       },
       body: uploadFormData,
     });
