@@ -1,5 +1,7 @@
+// src/App.tsx
+
 import React, { useState } from 'react';
-import { Camera, Heart, Share2 } from 'lucide-react';
+import { Camera } from 'lucide-react';
 import AgeSelector from './components/AgeSelector';
 import ImageUpload from './components/ImageUpload';
 import ActivityResult from './components/ActivityResult';
@@ -11,7 +13,6 @@ export interface ActivityStep {
   instructionEnglish: string;
   instructionChinese: string;
 }
-
 export interface Activity {
   id: string;
   name: string;
@@ -25,45 +26,40 @@ export interface Activity {
 function App() {
   const [currentStep, setCurrentStep] = useState<'age' | 'upload' | 'loading' | 'result'>('age');
   const [selectedAge, setSelectedAge] = useState<number>(12);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null); // State now holds a File object
   const [generatedActivities, setGeneratedActivities] = useState<Activity[]>([]);
-
-  const handleAgeChange = (age: number) => {
-    setSelectedAge(age);
-  };
 
   const handleAgeSelection = (age: number) => {
     setSelectedAge(age);
     setCurrentStep('upload');
   };
 
-  const handleImageUpload = async (imageUrl: string) => {
-    setUploadedImage(imageUrl);
+  const handleImageUpload = async (imageFile: File) => { // Now receives a File object
+    setUploadedFile(imageFile);
     setCurrentStep('loading');
     
     try {
-      const activities = await generatePlayActivities(imageUrl, selectedAge);
+      const activities = await generatePlayActivities(imageFile, selectedAge); // Pass File object to service
       setGeneratedActivities(activities);
       setCurrentStep('result');
     } catch (error) {
       console.error('Failed to generate activity:', error);
-      // Handle error - could show error state
-      setCurrentStep('upload');
+      setCurrentStep('upload'); // Go back on error
     }
   };
 
   const handleStartOver = () => {
     setCurrentStep('age');
-    setUploadedImage(null);
+    setUploadedFile(null);
     setGeneratedActivities([]);
   };
 
   const handleGenerateNew = async () => {
-    if (!uploadedImage) return;
+    if (!uploadedFile) return;
     
     setCurrentStep('loading');
     try {
-      const activities = await generatePlayActivities(uploadedImage, selectedAge);
+      const activities = await generatePlayActivities(uploadedFile, selectedAge); // Pass File object again
       setGeneratedActivities(activities);
       setCurrentStep('result');
     } catch (error) {
@@ -75,63 +71,26 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-blue-50 to-yellow-50">
       <div className="container mx-auto px-4 py-6 max-w-md">
-        {/* Header */}
         <header className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
             <div className="bg-gradient-to-r from-pink-400 to-purple-400 p-3 rounded-full">
               <Camera className="w-8 h-8 text-white" />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            Time to Play!
-          </h1>
-          <p className="text-xl text-gray-600 font-medium">
-            宝宝AI游戏伙伴
-          </p>
-          <p className="text-sm text-gray-500 mt-1">
-            为您的宝宝定制专属游戏方案
-          </p>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Time to Play!</h1>
+          <p className="text-xl text-gray-600 font-medium">宝宝AI游戏伙伴</p>
         </header>
 
-        {/* Progress Indicator */}
-        <div className="flex justify-center mb-8">
-          <div className="flex space-x-2">
-            <div className={`w-3 h-3 rounded-full transition-colors ${
-              currentStep === 'age' ? 'bg-pink-400' : 'bg-gray-300'
-            }`} />
-            <div className={`w-3 h-3 rounded-full transition-colors ${
-              ['upload', 'loading', 'result'].includes(currentStep) ? 'bg-pink-400' : 'bg-gray-300'
-            }`} />
-            <div className={`w-3 h-3 rounded-full transition-colors ${
-              currentStep === 'result' ? 'bg-pink-400' : 'bg-gray-300'
-            }`} />
-          </div>
-        </div>
-
-        {/* Content */}
         <main className="space-y-6">
           {currentStep === 'age' && (
-            <AgeSelector 
-              selectedAge={selectedAge}
-              onAgeChange={setSelectedAge}
-              onAgeSelect={handleAgeSelection}
-            />
+            <AgeSelector selectedAge={selectedAge} onAgeChange={setSelectedAge} onAgeSelect={handleAgeSelection} />
           )}
-          
           {currentStep === 'upload' && (
             <ImageUpload onImageUpload={handleImageUpload} selectedAge={selectedAge} />
           )}
-          
-          {currentStep === 'loading' && (
-            <LoadingScreen />
-          )}
-          
+          {currentStep === 'loading' && <LoadingScreen />}
           {currentStep === 'result' && generatedActivities.length > 0 && (
-            <ActivityResult 
-              activities={generatedActivities}
-              onStartOver={handleStartOver}
-              onGenerateNew={handleGenerateNew}
-            />
+            <ActivityResult activities={generatedActivities} onStartOver={handleStartOver} onGenerateNew={handleGenerateNew} />
           )}
         </main>
       </div>
