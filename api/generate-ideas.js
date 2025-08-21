@@ -128,7 +128,7 @@ app.post('/api/generate-ideas', upload.single('image'), async (req, res) => {
       age: age,
       toyimage: { 
         type: "image",
-        transfer_method: "upload_file_id",
+        transfer_method: "local_file",
         upload_file_id: fileId
       }
     };
