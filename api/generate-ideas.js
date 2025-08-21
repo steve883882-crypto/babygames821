@@ -1,4 +1,4 @@
-// api/generate-ideas.js - 最终修正版
+// api/generate-ideas.js
 
 import express from 'express';
 import cors from 'cors';
@@ -16,19 +16,36 @@ config({ path: join(__dirname, '..', '.env.local') });
 const app = express();
 let port = 3001;
 
-// 初始化 multer，但不要在这里全局使用 app.use()
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+const upload = multer({ storage: multer.memoryStorage() });
+
+app.use(cors({ origin: 'http://localhost:5174', credentials: true }));
+
+// =================================================================
+// ▼▼▼ 请在这里添加第一处后端日志 (请求头检查) ▼▼▼
+// =================================================================
+app.use('/api/generate-ideas', (req, res, next) => {
+    console.log('\n--- 收到请求 /api/generate-ideas ---');
+    console.log('请求时间:', new Date().toISOString());
+    console.log('请求头 (Content-Type):', req.headers['content-type']);
+    console.log('---------------------------------');
+    next();
 });
+// =================================================================
+// ▲▲▲ 日志代码结束 ▲▲▲
+// =================================================================
 
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+app.post('/api/generate-ideas', upload.single('image'), async (req, res) => {
+  // =================================================================
+  // ▼▼▼ 请在这里添加第二处后端日志 (Multer解析后检查) ▼▼▼
+  // =================================================================
+  console.log('\n--- Multer 中间件已执行 ---');
+  console.log('req.file (图片文件):', req.file ? `存在, 文件名: ${req.file.originalname}` : '不存在');
+  console.log('req.body (文本字段):', req.body);
+  console.log('---------------------------');
+  // =================================================================
+  // ▲▲▲ 日志代码结束 ▲▲▲
+  // =================================================================
 
-// --- 关键修改点 START ---
-// 将 multer 中间件 upload.any() 直接放在这个路由处理器中
-// 这是处理 multipart/form-data 的最标准方式
-app.post('/api/generate-ideas', upload.any(), async (req, res) => {
-// --- 关键修改点 END ---
   try {
     const difyApiBaseUrl = process.env.DIFY_API_BASE_URL;
     const difyApiKey = process.env.DIFY_API_KEY;
@@ -37,9 +54,7 @@ app.post('/api/generate-ideas', upload.any(), async (req, res) => {
       return res.status(500).json({ error: 'Missing Dify API configuration' });
     }
 
-    // 从 req.files 和 req.body 中获取数据
-    // upload.any() 会确保 req.files 和 req.body 在这里是可用的
-    const imageFile = req.files && req.files.find(f => f.fieldname === 'image');
+    const imageFile = req.file;
     const age = req.body.age;
 
     if (!imageFile || !age) {
@@ -50,18 +65,19 @@ app.post('/api/generate-ideas', upload.any(), async (req, res) => {
     let apiUrl = difyApiBaseUrl.trim().replace(/\/$/, '');
     if (!apiUrl.startsWith('http')) apiUrl = 'https://' + apiUrl;
     
-    // 步骤 1: 上传文件到 Dify
     const uploadFileUrl = `${apiUrl}/v1/files/upload`;
     const uploadFormData = new FormData();
-    uploadFormData.append('file', imageFile.buffer, imageFile.originalname);
     uploadFormData.append('user', 'my-app-user-123');
+    uploadFormData.append('file', imageFile.buffer, {
+      filename: imageFile.originalname,
+      contentType: imageFile.mimetype,
+    });
     
-    const uploadResponse = await axios.post(uploadFileUrl, uploadFormData.getBuffer(), {
+    const uploadResponse = await axios.post(uploadFileUrl, uploadFormData, {
       headers: { ...uploadFormData.getHeaders(), 'Authorization': `Bearer ${difyApiKey}` },
     });
     const fileId = uploadResponse.data.id;
 
-    // 步骤 2: 执行 Dify 工作流
     const workflowUrl = `${apiUrl}/v1/workflows/run`;
     const workflowPayload = {
       inputs: {
