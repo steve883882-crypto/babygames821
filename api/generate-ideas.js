@@ -27,7 +27,15 @@ app.use(express.json({ limit: '10mb' }));
 // --- 关键修改点 END ---
 
 
+// Add a simple test route to verify server is working
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'Backend API server is running!' });
+});
+
 app.post('/api/generate-ideas', async (req, res) => {
+  console.log('Received request to /api/generate-ideas');
+  console.log('Request body keys:', Object.keys(req.body));
+  
   try {
     const difyApiBaseUrl = process.env.DIFY_API_BASE_URL;
     const difyApiKey = process.env.DIFY_API_KEY;
