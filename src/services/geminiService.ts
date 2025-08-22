@@ -1,43 +1,49 @@
 import { Activity } from '../App';
-import axios from 'axios'; // 引入 axios 以便在前端使用
-import FormData from 'form-data'; // 引入 form-data
+import axios from 'axios';
+import { resizeImageForAPI } from '../utils/imageUtils';
 
-// generatePlayActivities 现在直接与 Dify API 通信
 export async function generatePlayActivities(imageFile: File, ageInMonths: number): Promise<Activity[]> {
   try {
-    // =================================================================
-    // 步骤 1: (前端) 直接上传文件到 Dify
-    // =================================================================
-    const uploadFormData = new FormData();
-    uploadFormData.append('user', 'my-app-user-123');
-    uploadFormData.append('file', imageFile);
+    // Convert image file to base64 string
+    const base64Image = await resizeImageForAPI(imageFile);
 
-    console.log('Attempting to upload file directly to Dify proxy...');
-    
-    // 注意：我们请求的是 /dify-api，Vite 会自动代理并加上认证头
-    const uploadResponse = await axios.post('/dify-api/files/upload', uploadFormData, {
+    // Send request to local backend API
+    const response = await axios.post('/api/generate-ideas', {
+      image: base64Image,
+      imageName: imageFile.name,
+      imageType: imageFile.type,
+      age: ageInMonths
+    }, {
       headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+        'Content-Type': 'application/json'
+      }
     });
 
-    const fileId = uploadResponse.data.id;
-    console.log('File uploaded via proxy, file_id:', fileId);
+    const activities = response.data;
+    if (!Array.isArray(activities)) {
+      throw new Error('Backend did not return an array of activities');
+    }
 
-    // =================================================================
-    // 步骤 2: (前端) 直接执行 Dify 工作流
-    // =================================================================
-    const workflowPayload = {
-      inputs: {
-        age: ageInMonths.toString(),
-        toyimage: [{
-          type: "image",
-          transfer_method: "local_file",
-          upload_file_id: fileId
-        }]
-      },
-      response_mode: "blocking",
-      user: 'my-app-user-123'
+    const processedActivities = activities.map(activity => ({ 
+      ...activity, 
+      isFavorited: false 
+    }));
+    
+    return processedActivities;
+
+  } catch (error: any) {
+    console.error('Error calling backend API:', error);
+    
+    let errorMessage = '生成游戏方案失败';
+    if (error.response?.data?.error) {
+      errorMessage = error.response.data.error;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    throw new Error(errorMessage);
+  }
+}
     };
     
     // 再次请求 /dify-api，Vite 会自动代理并加上认证头

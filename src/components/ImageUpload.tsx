@@ -2,18 +2,20 @@ import React, { useRef, useState } from 'react';
 import { Camera, Image, Upload, ArrowLeft } from 'lucide-react';
 
 interface ImageUploadProps {
-  onImageUpload: (imageUrl: string) => void;
+  onImageUpload: (imageFile: File) => void;
   selectedAge: number;
 }
 
 const ImageUpload: React.FC<ImageUploadProps> = ({ onImageUpload, selectedAge }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      setSelectedFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
         const imageUrl = e.target?.result as string;
@@ -38,9 +40,9 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImageUpload, selectedAge })
   };
 
   const handleConfirmUpload = () => {
-    if (selectedImage) {
+    if (selectedFile) {
       setIsProcessing(true);
-      onImageUpload(selectedImage);
+      onImageUpload(selectedFile);
     }
   };
 
