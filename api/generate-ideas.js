@@ -99,12 +99,14 @@ app.post('/api/generate-ideas', async (req, res) => {
 
 // ... (服务器启动代码保持不变) ...
 const server = createServer(app);
-server.listen(port, () => console.log(`API server running at http://localhost:${port}`))
-  .on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      port++;
-      setTimeout(() => server.listen(port), 100);
-    } else {
-      console.error(err);
-    }
+server.listen(port, () => {
+  console.log(`API server running at http://localhost:${port}`);
+}).on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${port} is already in use. Please stop the process using this port or use a different port.`);
+    process.exit(1);
+  } else {
+    console.error('Server error:', err);
+    process.exit(1);
+  }
 });

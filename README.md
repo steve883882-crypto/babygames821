@@ -48,7 +48,13 @@ VITE_GEMINI_API_KEY=your_gemini_api_key_here
 3. 创建新的 API Key
 4. 将 API Key 添加到 `.env.local` 文件
 
-### 4. 启动开发服务器
+### 4. 启动后端 API 服务器
+
+```bash
+npm run api
+```
+
+### 5. 启动前端开发服务器
 
 ```bash
 npm run dev
