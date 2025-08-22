@@ -44,6 +44,19 @@ export async function generatePlayActivities(imageFile: File, ageInMonths: numbe
     throw new Error(errorMessage);
   }
 }
+
+export async function generatePlayActivitiesDirect(imageFile: File, ageInMonths: number): Promise<Activity[]> {
+  try {
+    // Convert image file to base64 string
+    const base64Image = await resizeImageForAPI(imageFile);
+
+    const workflowPayload = {
+      inputs: {
+        image: base64Image,
+        age: ageInMonths
+      },
+      response_mode: "blocking",
+      user: "user-123"
     };
     
     // 再次请求 /dify-api，Vite 会自动代理并加上认证头
